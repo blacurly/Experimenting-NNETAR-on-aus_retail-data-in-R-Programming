@@ -1,0 +1,62 @@
+#title: "Experiment with using NNETAR() on aus_retail dataset R Programming"
+#author: "Faransina (Olivia) Rumere"
+#date: "2025-03-03"
+
+#You may want to compare its model performance against the traditional models we learned in the previous chapters and provide insights.
+#To get started with selecting your dataset, please use aus_retail in your R code.
+#Experiment with using NNETAR() on your retail data and other data we have considered in previous chapters.
+
+#Load Necessary Package
+library(fpp3)
+
+#Instead of use data before 2018, we will focus to use data after 2000 for relevancy
+data(aus_retail)
+myseries <- aus_retail |> 
+  filter(`Series ID` == sample(aus_retail$`Series ID`, 1), year(Month) > 2000) |>
+  as_tsibble(index = Month)
+
+#Train-test split
+train_data <- myseries |> filter(year(Month) < 2016)
+test_data <- myseries |> filter(year(Month) >= 2016)
+
+#Model Training
+fit_nnetar <- train_data |> model(NNETAR(Turnover))
+fit_ets <- train_data |> model(ETS(Turnover))
+fit_arima <- train_data |> model(ARIMA(Turnover))
+fit_naive <- train_data |> model(NAIVE(Turnover))
+
+fc_nnetar <- fit_nnetar |> forecast(h = nrow(test_data))
+fc_ets <- fit_ets |> forecast(h = nrow(test_data))
+fc_arima <- fit_arima |> forecast(h = nrow(test_data))
+fc_naive <- fit_naive |> forecast(h = nrow(test_data))
+
+fc_all <- bind_rows(
+  fc_nnetar |> mutate(Model = "NNETAR"),
+  fc_ets |> mutate(Model = "ETS"),
+  fc_arima |> mutate(Model = "ARIMA"),
+  fc_naive |> mutate(Model = "Naïve")
+)
+
+#Plot the forecasts
+autoplot(myseries, Turnover) +
+  autolayer(fc_all, .mean, alpha = 0.6) +
+  facet_wrap(~ Model) +
+  labs(title = "Retail Sales Forecasting Comparison",
+       y = "Turnover",
+       x = "Year")
+
+#The plot compares the result of NNETAR with other models which are ARIMA, ETS, Naïve for retail sales turnover. The NNETAR, ARIMA and ETS models closely follow the trend and seasonality of the historical data and seems to have more stable projections. On the other hand, The Naïve model shows a high uncertainty, shown by the wide confidence interval. Based on this visualization, NNETAR ETS and ARIMA provide more reliable forecasts, while Naïve is the least robust due to high uncertainty. 
+
+#Model Accuracy
+accuracy_nnetar <- fc_nnetar |> accuracy(test_data) |> mutate(Model = "NNETAR")
+accuracy_ets <- fc_ets |> accuracy(test_data) |> mutate(Model = "ETS")
+accuracy_arima <- fc_arima |> accuracy(test_data) |> mutate(Model = "ARIMA")
+accuracy_naive <- fc_naive |> accuracy(test_data) |> mutate(Model = "Naïve")
+
+accuracy_tbl <- bind_rows(accuracy_nnetar, accuracy_ets, accuracy_arima, accuracy_naive)
+print(accuracy_tbl)
+
+#The model evaluation results above shows that NNETAR model performed the best with having the lowest RMSE at 1.211 and MAE at 0.928, it indicate that it effectively captures the underlying patterns in the retail sales data. Following this, ETS also perform better with RMSE at 1.214 and MAE at 0.993, making it a strong alternative for forecasting. Additionally, we can also consider ARIMA, although it has higher RMSE and MAE compare to NNETAR and ETS, the gap still small. In contrast, the Naïve model performed worse, with an RMSE of 28.513 and MAE of 27.414. 
+
+#Overall, for this case, we can say that NNETAR emerges as the best forecasting model, with ETS as a strong contender, while ARIMA remains a reasonable choice but with slightly higher error and Naive model is not recommended to use as forecasting model.
+
